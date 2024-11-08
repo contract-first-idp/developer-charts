@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ .Values.component }}-shared-data
+  name: {{ .Values.component }}-api-shared-data
 spec:
   resources:
     requests:
@@ -14,7 +14,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ .Values.component }}-maven-settings
+  name: {{ .Values.component }}-api-maven-settings
 spec:
   resources:
     requests:

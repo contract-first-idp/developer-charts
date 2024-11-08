@@ -159,3 +159,12 @@ spec:
     - name: DOCKERFILE
       value: $(params.dockerfilePath)
   {{ end }}
+  - name: deploy-to-dev
+    runAfter: 
+      - build-container-image
+    taskRef:
+      name: openshift-client
+      kind: ClusterTask
+    params:
+    - name: SCRIPT
+      value: oc rollout restart deployment/{{ .Values.component }} -n {{ .Values.system }}-dev

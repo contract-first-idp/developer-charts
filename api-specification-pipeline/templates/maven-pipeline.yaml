@@ -4,7 +4,7 @@ metadata:
   name: {{ .Values.component }}-api
 spec:
   description: | 
-    This pipeline runs a Spectral linter against an API specification and publishes to Microcks
+    This pipeline runs a Spectral linter against an API specification and publishes to Microcks and Apicurio Registry
   params:
   - default: https://github.com/{{ .Values.domain }}/{{ .Values.system }}-{{ .Values.component }}-api
     name: repo-url
@@ -37,7 +37,6 @@ spec:
     workspaces:
     - name: output
       workspace: shared-data
-  {{- if .Values.mock_provider_url }}
   - name: run-spectral
     runAfter: ["fetch-source"]
     taskRef:
@@ -61,42 +60,11 @@ spec:
     workspaces:
     - name: data
       workspace: shared-data
-  {{- end }}
-  {{- if .Values.apicurioRegistry }}
-  - name: clean-artifacts
-    taskRef:
-      name: maven
-      kind: ClusterTask
-    runAfter: 
-      - fetch-source
-    params:
-    - name: GOALS
-      value: 
-        - build-helper:remove-project-artifact
-    workspaces:
-      - name: source
-        workspace: shared-data
-      - name: maven-settings
-        workspace: maven-settings
-  - name: clean-registered-artifact
-    taskRef:
-      name: curl
-      kind: Task
-    runAfter:
-      - clean-artifacts
-    params:
-      - name: url
-        value: "{{ .Values.apicurioRegistry }}/apis/registry/v2/groups/{{ .Values.groupid }}/artifacts/{{ .Values.component }}"
-      - name: options
-        value:
-          - "-X"
-          - "DELETE"
   - name: register-apicurio
     taskRef:
       name: maven
       kind: ClusterTask
-    runAfter: 
-      - clean-registered-artifact
+    runAfter: ["run-spectral"]
     params:
     - name: GOALS
       value: 
@@ -106,4 +74,3 @@ spec:
         workspace: shared-data
       - name: maven-settings
         workspace: maven-settings
-  {{- end }}

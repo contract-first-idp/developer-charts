@@ -18,7 +18,7 @@ spec:
               - /bin/sh
               - -c
               - |
-                (tkn task delete -f curl || true) && tkn hub install task curl && tkn pipeline start {{ .Values.component }}-api -w name=shared-data,claimName={{ .Values.component }}-shared-data -w name=maven-settings,claimName={{ .Values.component }}-maven-settings --use-param-defaults
+                (tkn task delete -f curl || true) && tkn hub install task curl && tkn pipeline start {{ .Values.component }}-api -w name=shared-data,claimName={{ .Values.component }}-api-shared-data -w name=maven-settings,claimName={{ .Values.component }}-api-maven-settings --use-param-defaults
             env:
               - name: HOME
                 value: /tekton/home
