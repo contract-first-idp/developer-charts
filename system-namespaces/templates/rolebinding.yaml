@@ -4,15 +4,15 @@ kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: {{ $.Values.system }}-app-registry-access-{{ $env }}
-  namespace: {{ $.Values.system }}-{{ $env }}
+  namespace: {{ $.Values.system }}-build
 subjects:
   - kind: ServiceAccount
     name: default
-    namespace: {{ $.Values.system }}-build
+    namespace: {{ $.Values.system }}-{{ $env }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: image-puller
+  name: 'system:image-puller'
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
