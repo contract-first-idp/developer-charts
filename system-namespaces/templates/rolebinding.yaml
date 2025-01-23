@@ -1,9 +1,9 @@
 {{- range $env := .Values.environments }}
-{{ if not (eq "$env" "build" ) }}
+{{ if ne $env "build" }}
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: {{ $.Values.system }}-app-registry-access
+  name: {{ $.Values.system }}-app-registry-access-{{ $env }}
   namespace: {{ $.Values.system }}-{{ $env }}
 subjects:
   - kind: ServiceAccount
