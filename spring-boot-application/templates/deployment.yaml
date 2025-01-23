@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: {{ .Values.component }}
-          image: "{{ .Values.image.registry }}/{{ .Values.system }}-{{ .Values.environment }}/{{ .Values.component }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.registry }}/{{ .Values.system }}-build/{{ .Values.component }}:{{ .Values.image.tag }}"
           imagePullPolicy: Always
           ports:
             - name: http
