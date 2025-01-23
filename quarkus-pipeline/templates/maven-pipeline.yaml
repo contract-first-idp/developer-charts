@@ -30,7 +30,7 @@ spec:
       name: dockerfilePath
       type: string
       description: "path to Dockerfile"
-    - default: {{ .Values.image.registry }}/{{ .Values.system }}-dev/{{ .Values.component }}
+    - default: {{ .Values.image.registry }}/{{ .Values.system }}-build/{{ .Values.component }}
       name: image
       type: string
       description: "container image"
