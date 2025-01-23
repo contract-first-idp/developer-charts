@@ -1,0 +1,6 @@
+system: default-system
+environments: 
+ - dev
+ - qa
+ - prod
+ - build

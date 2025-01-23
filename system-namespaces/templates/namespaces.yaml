@@ -1,0 +1,9 @@
+{{- range $env := .Values.environments }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $.Values.system }}-system-{{ $env }}
+  labels:
+    app : {{ $.Values.system }}
+---
+{{- end }}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: System Namespaces Chart
+description: A Helm chart for creating system namespaces
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
