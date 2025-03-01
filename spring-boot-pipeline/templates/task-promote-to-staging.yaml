@@ -19,7 +19,7 @@ spec:
       type: string
   workspaces:
     - description: The workspace consisting of maven project.
-      name: source
+      name: maven-repo
   results:
     - name: branch_name
       description: The branch name used for pull-request
