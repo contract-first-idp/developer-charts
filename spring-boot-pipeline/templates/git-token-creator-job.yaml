@@ -1,0 +1,30 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{ .Values.component }}-git-token-job
+spec:
+  selector: {}
+  template:
+    metadata:
+      name: {{ .Values.component }}-git-token-job
+    spec:
+      containers:
+        - name: oc-cli
+          image: 'image-registry.openshift-image-registry.svc:5000/openshift/cli:latest'
+          command:
+            - /bin/sh
+            - '-c'
+            - 'oc login $KUBERNETES_SERVICE_HOST:$KUBERNETES_PORT_443_TCP_PORT --insecure-skip-tls-verify --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token); export TOKEN=$(oc get secret rhdh-secrets -n developer-hub -o jsonpath="{.data.GIT_TOKEN}" | base64 -d); oc project {{ .Values.system }}-build; oc delete secret github --ignore-not-found=true; oc create secret generic github --from-literal=token=$TOKEN'
+          resources:
+            limits:
+              cpu: '1'
+              memory: 512Mi
+            requests:
+              cpu: '1'
+              memory: 256Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      restartPolicy: Never
+      serviceAccountName: pipeline
+      

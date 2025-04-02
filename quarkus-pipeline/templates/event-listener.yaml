@@ -6,17 +6,60 @@ metadata:
 spec:
   serviceAccountName: pipeline
   triggers:
-    - bindings:
+    - name: dev-trigger
+      bindings:
         - kind: ClusterTriggerBinding
-          ref: github-push
+          name: git-revision
+          value: $(extensions.git-revision)
       interceptors:
         - params:
-            - name: git-revision
+            - name: "filter"
               value: >-
-                (body.ref.contains('{{ .Values.git.branch }}'))
+                body.ref.contains('main') && !(commits[0].message.contains("code-analysis"))
             - name: overlays
-              value: null
+              value:
+                - key: git-revision
+                  expression: "body.ref.split('/')[2]"
           ref:
             name: cel
       template:
-        ref: {{ .Values.component }}-run-pipeline
+        ref: "{{ .Values.component }}-run-pipeline"
+    - name: qa-trigger
+      bindings:
+        - kind: ClusterTriggerBinding
+          name: git-revision
+          value: $(extensions.git-revision)
+      interceptors:
+        - params:
+            - name: "filter"
+              value: >-
+                body.ref.contains('staging')
+            - name: overlays
+              value:
+                - key: git-revision
+                  expression: "body.ref.split('/')[2]"
+          ref:
+            name: cel
+      template:
+        ref: "{{ .Values.component }}-run-pipeline"
+    - name: prod-trigger
+      bindings:
+        - kind: ClusterTriggerBinding
+          name: git-revision
+          value: $(extensions.git-revision)
+      interceptors:
+        - params:
+            - name: "filter"
+              value: >-
+                body.ref.contains('production')
+            - name: overlays
+              value:
+                - key: git-revision
+                  expression: "body.ref.split('/')[2]"
+          ref:
+            name: cel
+      template:
+        ref: "{{ .Values.component }}-run-pipeline"
+
+
+

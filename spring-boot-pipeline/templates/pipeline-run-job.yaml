@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
           - name: {{ .Values.component }}-pipeline-run-job
-            image: gcr.io/tekton-releases/dogfooding/tkn
+            image: public.ecr.aws/logistics/tekton-releases/dogfooding/tkn:v.sha256.8d4383ff675cdf42b0006fca9b5b3b0c1d6180ff0013805242c877352e03a359
             command:
               - /bin/sh
               - -c

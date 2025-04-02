@@ -1,0 +1,120 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  annotations:
+    tekton.dev/pipelines.minVersion: 0.12.1
+    tekton.dev/tags: git
+  name: create-promote-pull-request
+  labels:
+    app.kubernetes.io/version: '0.1'
+    operator.tekton.dev/provider-type: community
+spec:
+  description: This Task can be used to update image digest in a Git repo using the kustomize
+  params:
+    - name: GIT_BRANCH
+      type: string
+    - name: OWNER
+      type: string
+  workspaces:
+    - description: The workspace consisting of maven project.
+      name: output
+  results:
+    - name: target_branch_name
+      description: The branch name used for pull-request
+    - name: source_branch_name
+      description: The resulting current branch
+    - name: repo_name
+      description: Git Repo Url starting from organization path
+    - name: pr_title
+      description: Pull Request title
+  volumes:
+    - name: githubtoken
+      secret:
+        secretName: github
+  steps:
+    - name: promote
+      image: docker.io/alpine/git:v2.26.2
+      volumeMounts:
+        - name: githubtoken
+          readOnly: true
+          mountPath: /etc/github-open-pr
+      workingDir: $(workspaces.output.path)
+      script: |
+        set -x
+        export GITHUB_TOKEN=$(cat /etc/github-open-pr/token)
+        export GITHUB_ACTOR=$(params.OWNER)
+        git config --global --add safe.directory /workspace/output
+        git config --global user.name "$(params.OWNER)"
+        git config --global user.email "$(params.OWNER)@redhat.com"
+        
+        cd app/
+        git fetch -a
+        current_branch=$(echo $(params.GIT_BRANCH) | awk -F/ '{print $NF}')
+        git checkout $current_branch
+        echo -n "$current_branch" > $(results.source_branch_name.path)
+        echo -n "$current_branch" > ../current-branch
+        
+        if [ "$current_branch" == "main" ]; then
+          target_branch_name=staging
+          export result="IN_PROGRESS"
+          while [ "$result" == "IN_PROGRESS" ]; do
+            sleep 60
+            export sonarlink=$(awk 'match($0,/ceTaskUrl=[\s\S]*.+/){print substr($0,RSTART+10,RLENGTH-10)}' target/sonar/report-task.txt)
+            wget $sonarlink
+            mv task* sonar-result.txt
+            export result=$(awk 'match($0,/"status":"[A-Z]+/){print substr($0,RSTART+10,RLENGTH-10)}' sonar-result.txt)
+          done
+          
+          if [ "$result" != "SUCCESS" ]; then
+            echo "Quality Gate not passed"
+            exit 1
+          fi
+          git add sonar-result.txt
+          git add .gitignore
+          git commit -m "Updating code-analysis result"
+          git -c credential.helper= -c credential.helper='!f() { echo username=$(params.OWNER); echo "password=$GITHUB_TOKEN"; };f' push origin +main
+        elif [  "$current_branch" != "main" ]; then
+          current_branch=staging
+          target_branch_name=production
+        fi
+        echo -n "$target_branch_name" > $(results.target_branch_name.path)
+        echo -n "$target_branch_name" > ../target-branch
+      
+        existed_in_local=$(git branch --list $target_branch_name)
+        if [[ -z "${existed_in_local}" ]]; then
+          existed_in_remote=$(git ls-remote --heads origin $target_branch_name)
+          if [[ -n "${existed_in_remote}" ]]; then
+            git checkout -b $target_branch_name
+          fi
+        else
+          git checkout $target_branch_name
+        fi
+      
+        git pull origin $target_branch_name || true 
+        
+        existed_in_remote=$(git ls-remote --heads origin $target_branch_name)
+        if [[ -n "${existed_in_remote}" ]]; then
+          git branch --set-upstream-to origin/$target_branch_name $target_branch_name
+        fi
+        
+        base_git_url=$(git ls-remote --get-url origin)
+        prefix="https://github.com/"
+        echo -n "${base_git_url#"$prefix"}" > $(results.repo_name.path)
+        echo -n "${base_git_url#"$prefix"}" > ../git-repo
+
+    - name: create-pr
+      image: docker.io/curlimages/curl:8.12.1
+      volumeMounts:
+        - name: githubtoken
+          readOnly: true
+          mountPath: /etc/github-open-pr
+      workingDir: $(workspaces.output.path)
+      script: |
+        set -x
+        export GITHUB_TOKEN=$(cat /etc/github-open-pr/token)
+        export GIT_REPO=$(cat /workspace/output/git-repo)
+        export SOURCE_BRANCH=$(cat /workspace/output/current-branch)
+        export TARGET_BRANCH=$(cat /workspace/output/target-branch)
+        export PR_TITLE="mark branch for promotion to '"$TARGET_BRANCH"'"
+        curl -X POST 'https://api.github.com/repos/'"${GIT_REPO}"'/pulls' -H 'Authorization: Bearer '"$GITHUB_TOKEN"'' -H 'Content-Type: application/vnd.github+json' -d '{"base":"'"${TARGET_BRANCH}"'", "head":"'"${SOURCE_BRANCH}"'", "title":"'"${PR_TITLE}"'"}'
+

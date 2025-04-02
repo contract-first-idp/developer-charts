@@ -18,6 +18,10 @@ spec:
       name: git-revision
       type: string
       description: "component source Git revision"
+    - default: refs/heads/main
+      name: app-source-branch
+      type: string
+      description: "source branch for code quality"
     {{- if eq .Values.deployment "native" }}
     - default: ./src/main/docker/Dockerfile.native
     {{- else if eq .Values.deployment "legacy-jar" }}
@@ -49,6 +53,10 @@ spec:
         value: $(params.git-url)
       - name: revision
         value: $(params.git-revision)
+      - name: subdirectory
+        value: "app"
+      - name: verbose
+        value: "true"
     workspaces:
     - name: output
       workspace: maven-repo
@@ -58,11 +66,12 @@ spec:
     taskRef:
       name: maven
       kind: ClusterTask
-    runAfter: 
-      - clone
+    runAfter: ["clone"]
     params:
     - name: MAVEN_IMAGE
       value: 'andyhan/quarkus-mandrel-maven:jdk-21'
+    - name: CONTEXT_DIR
+      value: "app"
     - name: GOALS
       value: 
         - compile
@@ -72,9 +81,15 @@ spec:
       workspace: maven-repo
     - name: maven-settings
       workspace: maven-settings
-      
+
   - name: package
+    taskRef:
+      name: maven
+      kind: ClusterTask
+    runAfter: ["build"]
     params:
+      - name: CONTEXT_DIR
+        value: "app"
       - name: MAVEN_IMAGE
         value: 'andyhan/quarkus-mandrel-maven:jdk-21'
       - name: GOALS
@@ -83,20 +98,87 @@ spec:
           - '-DskipTests'
           - '-Pnative'
           - '-B'
-    runAfter:
-      - build
+    workspaces:
+    - name: source
+      workspace: maven-repo
+    - name: maven-settings
+      workspace: maven-settings
+
+  - name: code-analysis
     taskRef:
-      kind: ClusterTask
       name: maven
+      kind: ClusterTask
+    when:
+      - input: $(params.git-revision)
+        operator: in
+        values:
+          - "main"
+    runAfter:
+      - package
     workspaces:
       - name: source
         workspace: maven-repo
       - name: maven-settings
         workspace: maven-settings
-          
-  - name: build-container-image
-    runAfter: 
+    params:
+      - name: CONTEXT_DIR
+        value: "app"
+      - name: GOALS
+        value:
+          - install
+          - sonar:sonar
+          - -Dsonar.host.url=http://sonarqube-sonarqube.sonarqube.svc.cluster.local:9000
+          - -Dsonar.userHome=/tmp/sonar
+          - -DskipTests=true
+
+  - name: cve-scan-local-image
+    taskRef:
+      name: trivy-scanner
+      kind: Task
+    when:
+      - input: $(params.git-revision)
+        operator: in
+        values:
+          - "staging"
+    params:
+      - name: ARGS
+        value:
+          - "image"
+          - "--light"
+          - "--exit-code"
+          - "1"
+          - "--severity"
+          - "CRITICAL"
+      - name: IMAGE_PATH
+        value: $(params.image):$(params.version)
+    workspaces:
+      - name: manifest-dir
+        workspace: maven-repo
+    runAfter:
       - package
+
+  - name: promote-pr
+    runAfter:
+      - code-analysis
+      - cve-scan-local-image
+    taskRef:
+      name: create-promote-pull-request
+    when:
+      - input: $(params.git-revision)
+        operator: notin
+        values:
+          - "production"
+    params:
+      - name: GIT_BRANCH
+        value: $(params.git-revision)
+      - name: OWNER
+        value: {{ .Values.system }}
+    workspaces:
+      - name: output
+        workspace: maven-repo
+
+  - name: build-container-image
+    runAfter: ["package"]
     taskRef:
       name: buildah
       kind: ClusterTask
@@ -106,6 +188,8 @@ spec:
     params:
     - name: IMAGE
       value: $(params.image):$(params.version)
+    - name: CONTEXT
+      value: "app"
     - name: DOCKERFILE
       value: $(params.dockerfilePath)
   {{ end }}
@@ -117,6 +201,8 @@ spec:
     runAfter: 
       - clone
     params:
+    - name: CONTEXT_DIR
+      value: "app"
     - name: GOALS
       value: 
         - compile
@@ -163,12 +249,61 @@ spec:
     - name: DOCKERFILE
       value: $(params.dockerfilePath)
   {{ end }}
+
   - name: deploy-to-dev
-    runAfter: 
+    runAfter:
       - build-container-image
     taskRef:
       name: openshift-client
       kind: ClusterTask
+    when:
+      - input: $(params.git-revision)
+        operator: in
+        values:
+          - "main"
     params:
     - name: SCRIPT
-      value: oc rollout restart deployment/{{ .Values.component }} -n {{ .Values.system }}-dev
+      value: |
+        set -x
+        oc adm policy add-role-to-user cluster-admin system:serviceaccount:{{ .Values.system }}-build:pipeline 
+        oc policy add-role-to-user system:image-puller system:serviceaccount:{{ .Values.system }}-dev:default --namespace={{ .Values.system }}-build
+        oc rollout restart deployment/{{ .Values.component }} -n {{ .Values.system }}-dev
+
+  - name: deploy-to-qa
+    runAfter:
+      - build-container-image
+    taskRef:
+      name: openshift-client
+      kind: ClusterTask
+    when:
+      - input: $(params.git-revision)
+        operator: in
+        values:
+          - "staging"
+    params:
+      - name: SCRIPT
+        value: |
+          set -x
+          oc adm policy add-role-to-user cluster-admin system:serviceaccount:{{ .Values.system }}-build:pipeline 
+          oc policy add-role-to-user system:image-puller system:serviceaccount:{{ .Values.system }}-qa:default --namespace={{ .Values.system }}-build
+          oc rollout restart deployment/{{ .Values.component }} -n {{ .Values.system }}-qa
+
+  - name: deploy-to-prod
+    runAfter:
+      - build-container-image
+    taskRef:
+      name: openshift-client
+      kind: ClusterTask
+    when:
+      - input: $(params.git-revision)
+        operator: in
+        values:
+          - "production"
+    params:
+      - name: SCRIPT
+        value: |
+          set -x
+          oc adm policy add-role-to-user cluster-admin system:serviceaccount:{{ .Values.system }}-build:pipeline 
+          oc policy add-role-to-user system:image-puller system:serviceaccount:{{ .Values.system }}-prod:default --namespace={{ .Values.system }}-build
+          oc rollout restart deployment/{{ .Values.component }} -n {{ .Values.system }}-prod        
+

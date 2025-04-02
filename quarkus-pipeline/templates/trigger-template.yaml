@@ -43,4 +43,3 @@ spec:
           - name: maven-settings
             configMap:
               name: {{ .Values.component }}-maven-settings
-
