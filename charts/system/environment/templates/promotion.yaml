@@ -1,0 +1,100 @@
+{{- $order := .Values.environments.order }}
+{{- $currentIndex := -1 }}
+{{- range $index, $name := $order }}
+{{- if eq $name $.Values.environment.name }}{{ $currentIndex = $index }}{{- end }}
+{{- end }}
+{{- if ne (first $order) .Values.build.environment }}{{ fail "build environment must be first in the ordered promotion lifecycle" }}{{- end }}
+{{- if lt $currentIndex 0 }}{{ fail (printf "environment %q is not ordered" .Values.environment.name) }}{{- end }}
+{{- if gt $currentIndex 0 }}
+{{- $sourceName := index $order (sub $currentIndex 1) }}
+{{- $source := index .Values.environments.definitions $sourceName }}
+{{- if not $source }}{{ fail (printf "ordered environment %q has no definition" $sourceName) }}{{- end }}
+{{- $sourceNamespace := printf "%s%s" .Values.systemName $source.namespaceSuffix }}
+{{- $targetNamespace := printf "%s%s" .Values.systemName .Values.environment.namespaceSuffix }}
+{{- $sourceCredentialName := printf "image-promoter-source-%s" $sourceName | trunc 63 | trimSuffix "-" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: image-promoter
+  namespace: {{ $targetNamespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pipeline
+  namespace: {{ $targetNamespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+secrets:
+  - {name: {{ $sourceCredentialName }}}
+  - {name: {{ .Values.registry.credentials.destinationPushSecretName }}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: image-promoter-launcher
+  namespace: {{ $targetNamespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+rules:
+  - apiGroups: [tekton.dev]
+    resources: [pipelines]
+    verbs: [get]
+  - apiGroups: [tekton.dev]
+    resources: [pipelineruns]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: image-promoter-launcher
+  namespace: {{ $targetNamespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+subjects:
+  - {kind: ServiceAccount, name: image-promoter}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: image-promoter-launcher
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: promote-image
+  namespace: {{ $targetNamespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+spec:
+  params:
+    - {name: component, type: string}
+    - {name: image-tag, type: string}
+  results:
+    - {name: sourceDigest, value: $(tasks.copy.results.SOURCE_DIGEST)}
+    - {name: destinationDigest, value: $(tasks.copy.results.DESTINATION_DIGEST)}
+  tasks:
+    - name: assert-release-version
+      taskRef:
+        resolver: cluster
+        params:
+          - {name: kind, value: task}
+          - {name: name, value: assert-image-tag-compatible}
+          - {name: namespace, value: tekton-tasks}
+      params:
+        - name: source-image
+          value: {{ printf "docker://%s/%s_%s/$(params.component):$(params.image-tag)" .Values.registry.host .Values.registry.clusterId $sourceNamespace | quote }}
+        - name: destination-image
+          value: {{ printf "docker://%s/%s_%s/$(params.component):$(params.image-tag)" .Values.registry.host .Values.registry.clusterId $targetNamespace | quote }}
+    - name: copy
+      runAfter: [assert-release-version]
+      taskRef:
+        resolver: cluster
+        params:
+          - {name: kind, value: task}
+          - {name: name, value: skopeo-copy}
+          - {name: namespace, value: openshift-pipelines}
+      params:
+        - name: SOURCE_IMAGE_URL
+          value: {{ printf "docker://%s/%s_%s/$(params.component)@$(tasks.assert-release-version.results.sourceDigest)" .Values.registry.host .Values.registry.clusterId $sourceNamespace | quote }}
+        - name: DESTINATION_IMAGE_URL
+          value: {{ printf "docker://%s/%s_%s/$(params.component):$(params.image-tag)" .Values.registry.host .Values.registry.clusterId $targetNamespace | quote }}
+        - {name: SRC_TLS_VERIFY, value: "true"}
+        - {name: DEST_TLS_VERIFY, value: "true"}
+{{- end }}
