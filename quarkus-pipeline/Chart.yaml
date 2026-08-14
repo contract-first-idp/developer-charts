@@ -1,6 +1,0 @@
-apiVersion: v2
-name: Quarkus Tekton Pipeline
-description: A Quarkus tekton for building JVM and Native applications
-type: application
-version: 0.1.0
-appVersion: "0.1.0"

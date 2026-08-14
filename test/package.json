@@ -1,0 +1,15 @@
+{
+  "name": "developer-charts-tests",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "release:validate": "node validate-release.js",
+    "test": "jest --runInBand --config jest.config.js",
+    "test:release": "jest --runInBand --config jest.release.config.js"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "semver": "^7.8.5",
+    "yaml": "^2.8.0"
+  }
+}
