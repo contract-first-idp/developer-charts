@@ -20,6 +20,11 @@ spec:
         revision: {{ .Values.systemRepository.revision }}
         files:
           - path: components/*/environments/{{ .Values.environment.name }}.yaml
+  templatePatch: |
+    {{ "{{- with (dig \"implementation\" \"source\" nil .) }}" }}
+    spec:
+      sources: {{ "{{ list . | toJson }}" }}
+    {{ "{{- end }}" }}
   template:
     metadata:
       name: '{{ .Values.systemName }}-{{ "{{ index .path.segments 1 }}" }}-{{ .Values.environment.name }}'

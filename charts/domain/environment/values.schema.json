@@ -77,7 +77,13 @@
             },
             "argocd": {
               "type": "object",
-              "required": ["namespace", "destinationServer"]
+              "required": ["namespace", "destinationServer"],
+              "properties": {
+                "additionalTrustedSources": {
+                  "type": "array", "uniqueItems": true,
+                  "items": {"type": "string", "format": "uri"}
+                }
+              }
             },
             "cluster": {
               "type": "object",

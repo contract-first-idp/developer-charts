@@ -17,9 +17,12 @@ gives tenants a smaller, safer desired-state vocabulary. The charts accept tenan
 but platform entrypoints supply the trusted repository, revision, Registry, build policy, and
 infrastructure coordinates.
 
-The consequence is intentional platform opinion. A tenant can choose among supported profiles and
-configure exposed values, but cannot substitute an arbitrary implementation source through its
-System repository.
+Platform charts remain the default implementation of every discovered entity. Registrations may
+optionally supply `implementation.source` to select a different Git source for the generated Argo CD
+Application. This is an implementation choice, not an authorization grant: the selected repository,
+destination, and managed resource kinds must still be allowed by the relevant AppProject. Custom
+sources do not automatically receive the Helm values or platform configuration passed to the default
+chart.
 
 ## Design rationale
 
@@ -27,7 +30,7 @@ System repository.
 | --- | --- |
 | Reconcile from Git without writing back | Tenant Git is the declared state, so charts and controllers only read it and report status through Argo CD, Tekton, and workload conditions. Avoiding controller-generated commits prevents feedback loops and preserves a clear distinction between requested state and observed state. |
 | Discover intent with layered ApplicationSets | Domain, System, and leaf layers mirror the catalog concepts and ownership model already presented in Backstage. Small discovery files let Argo CD create only the Applications implied by tenant intent, without a central process regenerating a large manifest. Their paths and presence are consequently treated as a stable, tested interface. |
-| Keep trusted implementation coordinates in platform values | Tenants can select supported profiles and configure exposed behavior, but the platform supplies the chart repository and revision. This prevents tenant state from redirecting Argo CD to arbitrary implementation code. Adding a new Resource implementation is therefore an intentional platform change with its own chart, schema, and compatibility tests. |
+| Keep trusted implementation coordinates in platform values | Default charts and their revisions come from platform values. An optional `implementation.source` can replace the default reconciliation source only within the relevant AppProject's authorized repositories, destinations, and resource permissions. |
 | Use one Application per Component environment | The environment declaration creates the Container Application and its ImageStream immediately. Its optional release file adds `image.tag`; workload and promotion resources render only after that selection, so registry provisioning still converges before a release without requiring a second Application. |
 | Build once and materialize releases from the built digest | The build environment produces `git-<sha>`, and a human Git tag resolves that commit before copying the existing image to a release tag. A small digest guard refuses to reassign an existing human version to a different artifact. This avoids a release-time rebuild and preserves the link to the built commit. The current Maven step still uses `-DskipTests`, so test execution remains a separate policy. |
 | Use environment-local repositories and adjacent promotion | Each runtime pulls from its own environment's Quay repository, keeping credentials local and making image transport an explicit event. External Secrets places the immediately preceding repository's narrowly scoped pull credential in the target namespace; the target PipelineRun combines it with the target push credential. Direct skipping and reverse copying are intentionally excluded; rollback selects an older release and follows the same forward path. |
@@ -57,6 +60,34 @@ The Domain chart is evaluated once per Domain and emits one System-discovery App
 ordered environment. Every System environment discovers Component environments and Resources.
 Each Component Application optionally consumes its matching release file. API publication is
 discovered only by the build-environment System Application.
+
+## Selecting an alternative implementation
+
+Each discovery boundary supports an optional `implementation.source` object in its existing
+registration file. Omitting it leaves the chart's default `sources` unchanged. For example:
+
+```yaml
+implementation:
+  source:
+    repoURL: https://github.com/example-org/custom-system.git
+    targetRevision: main
+    path: gitops/system
+```
+
+When present, the ApplicationSet `templatePatch` replaces the generated Application's `sources`
+with a single Git directory source containing `repoURL`, `targetRevision`, and `path`. The custom
+source may use directory or Kustomize manifests, according to Argo CD's normal source detection.
+A custom Helm source requiring explicit Helm options is not configured by this initial override.
+No default `$values`/`$domain` sources, Helm `valuesObject`, or implicit secrets are carried over.
+
+The Application name, project, destination, labels, and sync policy remain set by the discovery
+chart. This is not a general-purpose source or privilege override. Argo CD still validates source
+repositories, destinations and managed resources against the relevant AppProject. Platform owners
+must authorize an alternative repository before switching to it.
+
+The Domain chart uses the same mechanism to select a System controller implementation; the System
+chart uses it for Component, API, and Resource implementations. For Resources, the existing
+`implementation.path` remains the default chart path when no `implementation.source` is supplied.
 
 ## Discovery signals
 

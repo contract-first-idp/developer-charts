@@ -26,8 +26,25 @@ The chart creates:
 - build RBAC in the Domain's build environment;
 - adjacent image-promotion RBAC and Pipeline resources in later environments.
 
-Resource declarations select a supported implementation path. The trusted repository and revision
-come from `delivery.charts`, so tenant state cannot redirect Argo CD to another implementation.
+### Leaf implementation selection
+
+API, Component, and Resource discovery files may include optional `implementation.source`:
+
+```yaml
+implementation:
+  source:
+    repoURL: https://github.com/example-org/custom-component.git
+    targetRevision: main
+    path: deploy/production
+```
+
+Without the override, the existing OpenAPI, Container, or Resource chart remains the selected
+implementation. With it, the ApplicationSet replaces the default `sources` list with one custom Git
+source while keeping the generated Application identity, System AppProject, destination and sync
+policy. Default Helm values and `$values` sources are not carried into the custom implementation.
+The System AppProject must permit the repository and its managed resource kinds. Existing Resource
+`implementation.path` continues to select a path in the trusted chart repository when
+`implementation.source` is absent. See [implementation selection](../../../docs/architecture.md#selecting-an-alternative-implementation).
 
 ## Required inputs
 
@@ -75,6 +92,14 @@ Build and promotion registry credentials are declared under `ServiceAccount.secr
 credential initializer. The charts do not manage `ServiceAccount.imagePullSecrets`; OpenShift owns
 that generated field. This does not change the pod-level `imagePullSecrets` rendered by workload
 charts for runtime image pulls.
+
+
+### Trusted leaf implementation repositories
+
+The System AppProject additionally permits repositories listed in
+`delivery.additionalTrustedSources`, forwarded from the trusted Domain platform configuration.
+The existing chart and System repository permissions remain unchanged. Repository authorization
+does not expand the project's resource or destination permissions.
 
 ## Validate
 
