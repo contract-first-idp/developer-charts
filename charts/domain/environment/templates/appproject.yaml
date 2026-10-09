@@ -21,6 +21,9 @@ spec:
   sourceRepos:
     - {{ $platformChartsRepository | quote }}
     - {{ $tenantDomainRepository | quote }}
+{{- range (.Values.spec.platform.argocd.additionalTrustedSources | default list | uniq) }}
+    - {{ . | quote }}
+{{- end }}
   destinations:
     - server: {{ .Values.spec.platform.argocd.destinationServer | quote }}
       namespace: "*"

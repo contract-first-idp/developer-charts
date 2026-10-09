@@ -8,6 +8,28 @@ It creates one Domain AppProject and one System-discovery ApplicationSet per ord
 Each ApplicationSet watches `systems/*/environments/<environment>.yaml`; a missing activation file
 means that System is inactive in that environment.
 
+### System implementation selection
+
+The System environment registration may include optional `implementation.source` to select a
+custom Git reconciliation source in place of `charts/system/environment`:
+
+```yaml
+systemName: example-system
+implementation:
+  source:
+    repoURL: https://github.com/example-org/example-system.git
+    targetRevision: main
+    path: gitops/system
+```
+
+Without this block, generated System Applications continue using the platform's default System
+chart and its supplied values. With the block, the ApplicationSet patches the `sources` list to
+one custom Git source. It preserves the generated Application name, Domain AppProject, destination,
+and sync policy. The custom source does not inherit the default chart's Helm values or its additional
+values repository. Source repositories and managed resources must be authorized by the Domain
+AppProject. The chart does not add trust permissions for custom sources. See
+[implementation selection](../../../docs/architecture.md#selecting-an-alternative-implementation).
+
 By default, Domain admission provisions publisher identities. To admit a Domain without managing publisher clients, set `spec.platform.security.publisherIdentity.enabled: false` in the **trusted platform target**. This omits all publisher-identity resources while retaining the Domain AppProject and System discovery ApplicationSets. Publisher credentials/roles must then be supplied separately when needed. The default is enabled, preserving existing installations.
 
 The same Domain Application owns its privileged publisher boundary without creating a separate
@@ -37,3 +59,11 @@ helm lint charts/domain/environment
 helm template tenant-domain charts/domain/environment \
   -f /path/to/merged-domain-and-target-values.yaml
 ```
+
+
+### Trusted implementation repositories
+
+The platform target can extend the Domain AppProject source allowlist using
+`spec.platform.argocd.additionalTrustedSources`. Entries are additive to the chart and Domain
+repository defaults and are controlled by platform configuration, not System registrations.
+Authorization to use a repository does not expand the allowed resource kinds or destinations.

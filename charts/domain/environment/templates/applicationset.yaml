@@ -41,6 +41,11 @@ spec:
         revision: main
         files:
           - path: systems/*/environments/{{ $environment }}.yaml
+  templatePatch: |
+    {{ "{{- with (dig \"implementation\" \"source\" nil .) }}" }}
+    spec:
+      sources: {{ "{{ list . | toJson }}" }}
+    {{ "{{- end }}" }}
   template:
     metadata:
       name: '{{ "{{ .systemName }}" }}-{{ $environment }}-system'
@@ -74,6 +79,8 @@ spec:
 {{ toYaml $systemDefinitions | indent 18 }}
               delivery:
                 namespace: {{ $.Values.spec.platform.argocd.namespace }}
+                additionalTrustedSources:
+{{ toYaml ($.Values.spec.platform.argocd.additionalTrustedSources | default list) | indent 18 }}
                 project: {{ $systemProjectName | quote }}
                 destinationServer: {{ $.Values.spec.platform.argocd.destinationServer }}
                 charts:

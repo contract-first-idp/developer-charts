@@ -45,7 +45,10 @@ The Domain chart reads environment policy and System activation files. Each acti
 then discovers its API, Component, release-selection, and Resource files. Leaf charts interpret
 that desired state using platform-owned registry, Pipeline, operator, and security configuration.
 
-Tenant Git decides what should run; these charts decide how supported intent is implemented. See
+Tenant Git decides what should run. Platform charts provide the default implementation at each
+discovery boundary; an optional registration-level `implementation.source` can select a different
+Git implementation where the relevant Argo CD AppProject authorizes it. This does not change the
+entity's identity or ownership. See
 [Architecture](docs/architecture.md) for the discovery patterns, values flow, project ownership,
 release materialization, and promotion contracts.
 

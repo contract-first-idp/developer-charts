@@ -17,6 +17,9 @@ spec:
   sourceRepos:
     - {{ .Values.delivery.charts.repository | quote }}
     - {{ .Values.systemRepository.url | quote }}
+{{- range (.Values.delivery.additionalTrustedSources | default list | uniq) }}
+    - {{ . | quote }}
+{{- end }}
   destinations:
     - server: {{ .Values.delivery.destinationServer | quote }}
       namespace: {{ printf "%s*" .Values.systemName | quote }}

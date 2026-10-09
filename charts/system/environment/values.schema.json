@@ -28,6 +28,7 @@
       "type": "object",
       "required": ["namespace", "project", "destinationServer", "charts"],
       "properties": {
+        "additionalTrustedSources": {"type": "array", "uniqueItems": true, "items": {"type": "string", "format": "uri"}},
         "charts": {
           "type": "object",
           "required": ["repository", "revision"],
